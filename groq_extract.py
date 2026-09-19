@@ -29,12 +29,12 @@ def normalize_voice_text(text):
     """Correct only common currency and direction spelling variants, never amounts."""
     text = text.replace('’', "'").replace('‘', "'").replace('ʻ', "'").replace('ў', 'ў')
     replacements = (
-        (r'\\bдоллор\\w*\\b|\\bдолор\\w*\\b|\\bдоллардан\\b', 'доллар'),
-        (r'\\bdollor\\b|\\bdolar\\b|\\bdollar\\b', 'доллар'),
-        (r'\\bсом\\b|\\bсум\\b|\\bсўмдан\\b', 'сўм'),
-        (r"\\bso['‘’]?m\\b|\\bsom\\b", 'сўм'),
-        (r'\\bкиримга\\b|\\bкирими\\b|\\bkirim\\b', 'кирим'),
-        (r'\\bчиқимга\\b|\\bчиқими\\b|\\bchiqim\\b|\\bchikim\\b', 'чиқим'),
+        (r'\bдоллор\w*\b|\bдолор\w*\b|\bдоллардан\b', 'доллар'),
+        (r'\bdollor\b|\bdolar\b|\bdollar\b', 'доллар'),
+        (r'\bсом\b|\bсум\b|\bсўмдан\b', 'сўм'),
+        (r"\bso['‘’]?m\b|\bsom\b", 'сўм'),
+        (r'\bкиримга\b|\bкирими\b|\bkirim\b', 'кирим'),
+        (r'\bчиқимга\b|\bчиқими\b|\bchiqim\b|\bchikim\b', 'чиқим'),
     )
     for pattern, value in replacements:
         text = re.sub(pattern, value, text, flags=re.IGNORECASE)
