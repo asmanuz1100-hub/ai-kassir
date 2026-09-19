@@ -35,6 +35,29 @@ class GroqCashTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(op['currency'],'USD')
         self.assertEqual(op['amount'],Decimal('500'))
 
+    async def test_real_voice_furgatdan_dolar_oldum(self):
+        client=fake_client('{"error":"unclear"}')
+        op=await extract(client,'Namangan, Furgatdan 500 dolar oldum.','test-model')
+        self.assertEqual((op['kind'],op['currency'],op['amount'],op['category']),
+                         ('income','USD',Decimal('500'),'other_income'))
+
+    async def test_real_voice_dolara_ending(self):
+        client=fake_client('{"error":"unclear"}')
+        op=await extract(client,'Namangan Furgatdan 500 dolara oldum.','test-model')
+        self.assertEqual((op['kind'],op['currency'],op['amount']),
+                         ('income','USD',Decimal('500')))
+
+    async def test_spoken_expense_latin(self):
+        client=fake_client('{"error":"unclear"}')
+        op=await extract(client,'Ishchiga oyligidan 1 million som berdim','test-model')
+        self.assertEqual((op['kind'],op['currency']),('expense','UZS'))
+
+    async def test_model_cannot_invent_sales_category(self):
+        client=fake_client('{"kind":"income","currency":"USD","category":"sales","amount":"500","party":"Furgat","note":""}')
+        op=await extract(client,'Namangan Furgatdan 500 dolar oldum','test-model')
+        self.assertEqual(op['category'],'other_income')
+        self.assertEqual(op['party'],'Furgat')
+
     async def test_unstated_currency_stays_ambiguous(self):
         with self.assertRaises(ValueError):
             await extract(fake_client('{"error":"unclear"}'),'кирим 500','test-model')
