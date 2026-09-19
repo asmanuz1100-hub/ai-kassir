@@ -14,7 +14,21 @@ logging.getLogger('httpx').setLevel(logging.WARNING)
 logging.getLogger('httpcore').setLevel(logging.WARNING)
 TOKEN=os.getenv('BOT_TOKEN','')
 SECRET=os.getenv('WEBHOOK_SECRET','')
-ADMIN_ID=int(os.getenv('ADMIN_TELEGRAM_ID','0'))
+def configured_admin_ids():
+    raw = os.getenv('ADMIN_TELEGRAM_IDS', '').strip() or os.getenv('ADMIN_TELEGRAM_ID', '').strip()
+    if not raw:
+        return ()
+    try:
+        ids = tuple(dict.fromkeys(int(part.strip()) for part in raw.split(',')))
+    except ValueError:
+        logging.error('Invalid administrator ID configuration')
+        return ()
+    if any(value <= 0 for value in ids):
+        logging.error('Administrator IDs must be positive integers')
+        return ()
+    return ids
+
+ADMIN_IDS=configured_admin_ids()
 AI_KEY=os.getenv('OPENAI_API_KEY','')
 client=AsyncOpenAI(api_key=AI_KEY) if AI_KEY else None
 BASE=f'https://api.telegram.org/bot{TOKEN}'
@@ -26,9 +40,9 @@ async def lifespan(app):
     # The free disposable test DB is strictly isolated from all other bots.
     # Production requires a separate durable DATABASE_URL and TEST_MODE=0.
     app.state.test_mode=TEST_MODE
-    app.state.ready=bool(TOKEN and SECRET and ADMIN_ID and (TEST_MODE or os.getenv('DATABASE_URL')))
+    app.state.ready=bool(TOKEN and SECRET and ADMIN_IDS and (TEST_MODE or os.getenv('DATABASE_URL')))
     if app.state.ready:
-        db.init(ADMIN_ID)
+        db.init(ADMIN_IDS)
         base_url=os.getenv('APP_BASE_URL','').rstrip('/')
         if base_url:
             try:
