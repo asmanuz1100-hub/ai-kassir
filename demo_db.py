@@ -31,6 +31,7 @@ def init(admin_ids):
         CREATE TABLE IF NOT EXISTS processed_updates (update_id INTEGER PRIMARY KEY);
         CREATE TABLE IF NOT EXISTS drafts (id INTEGER PRIMARY KEY AUTOINCREMENT,telegram_id INTEGER NOT NULL,raw_text TEXT,operations TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending', created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS ledger (id INTEGER PRIMARY KEY AUTOINCREMENT,draft_id INTEGER NOT NULL UNIQUE,telegram_id INTEGER NOT NULL,kind TEXT,currency TEXT,category TEXT,amount TEXT,party TEXT,note TEXT,created_at TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS entry_modes (telegram_id INTEGER PRIMARY KEY, kind TEXT NOT NULL CHECK (kind IN ('income','expense')));
         """)
         placeholders = ','.join('?' for _ in admin_ids)
         c.execute(f"DELETE FROM users WHERE role='admin' AND telegram_id NOT IN ({placeholders})", admin_ids)
@@ -104,3 +105,27 @@ def report(period='today'):
         if key not in results: results[key]=[Decimal(0),0]
         results[key][0]+=Decimal(r['amount']); results[key][1]+=1
     return [{'currency':k[0],'kind':k[1],'category':k[2],'total':v[0],'entries':v[1]} for k,v in sorted(results.items())]
+
+def set_entry_mode(uid, kind):
+    if kind not in ('income','expense'): raise ValueError('Invalid entry mode')
+    with connect() as con:
+        con.execute("INSERT INTO entry_modes(telegram_id,kind) VALUES(?,?) ON CONFLICT(telegram_id) DO UPDATE SET kind=excluded.kind",(uid,kind))
+
+def get_entry_mode(uid):
+    with connect() as con:
+        row=con.execute("SELECT kind FROM entry_modes WHERE telegram_id=?",(uid,)).fetchone()
+        return row['kind'] if row else None
+
+def clear_entry_mode(uid):
+    with connect() as con: con.execute("DELETE FROM entry_modes WHERE telegram_id=?",(uid,))
+
+def today_entries(uid=None):
+    """Telegram entries for Tashkent's current local day; optionally only one cashier."""
+    now=datetime.now(ZoneInfo('Asia/Tashkent'))
+    day=now.date().isoformat()
+    with connect() as con:
+        if uid is None:
+            rows=con.execute("SELECT * FROM ledger ORDER BY id ASC").fetchall()
+        else:
+            rows=con.execute("SELECT * FROM ledger WHERE telegram_id=? ORDER BY id ASC",(uid,)).fetchall()
+    return [dict(row) for row in rows if row['created_at'][:10]==day]
