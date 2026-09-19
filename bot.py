@@ -17,9 +17,13 @@ BASE=f'https://api.telegram.org/bot{TOKEN}'
 
 @asynccontextmanager
 async def lifespan(app):
-    if not TOKEN or not SECRET or not ADMIN_ID or not os.getenv('DATABASE_URL'):
-        raise RuntimeError('BOT_TOKEN, WEBHOOK_SECRET, ADMIN_TELEGRAM_ID and DATABASE_URL are required')
-    db.init(ADMIN_ID)
+    # The deploy is safe to start before credentials and an independent DB are provisioned.
+    # Until fully configured, the webhook rejects all financial transactions.
+    app.state.ready = bool(TOKEN and SECRET and ADMIN_ID and os.getenv('DATABASE_URL'))
+    if app.state.ready:
+        db.init(ADMIN_ID)
+    else:
+        logging.warning('AI Kassir awaiting new BOT_TOKEN, WEBHOOK_SECRET, ADMIN_TELEGRAM_ID and independent DATABASE_URL')
     yield
 
 app=FastAPI(lifespan=lifespan)
@@ -115,10 +119,11 @@ async def process(update):
     await send(chat,f'Эшитилган матн: {text}\n\n{format_op(op)}\n\nТўғри бўлса тасдиқланг.',markup)
 
 @app.get('/health')
-async def health(): return {'status':'ok'}
+async def health(): return {'status':'ok' if app.state.ready else 'setup_required'}
 
 @app.post('/webhook/{secret}')
 async def webhook(secret:str,request:Request):
+    if not app.state.ready: raise HTTPException(503,'Bot not configured')
     import secrets
     if not secrets.compare_digest(secret,SECRET): raise HTTPException(403)
     update=await request.json()
