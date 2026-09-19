@@ -19,7 +19,11 @@ def connect():
     finally:
         conn.close()
 
-def init(admin_id):
+def init(admin_ids):
+    """Synchronize the administrator allowlist without touching cashier accounts."""
+    admin_ids = tuple(dict.fromkeys(int(i) for i in admin_ids))
+    if not admin_ids or any(i <= 0 for i in admin_ids):
+        raise ValueError('At least one valid admin ID is required')
     Path(PATH).parent.mkdir(parents=True,exist_ok=True)
     with connect() as c:
         c.executescript("""
@@ -28,9 +32,10 @@ def init(admin_id):
         CREATE TABLE IF NOT EXISTS drafts (id INTEGER PRIMARY KEY AUTOINCREMENT,telegram_id INTEGER NOT NULL,raw_text TEXT,operations TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending', created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS ledger (id INTEGER PRIMARY KEY AUTOINCREMENT,draft_id INTEGER NOT NULL UNIQUE,telegram_id INTEGER NOT NULL,kind TEXT,currency TEXT,category TEXT,amount TEXT,party TEXT,note TEXT,created_at TEXT NOT NULL);
         """)
-        # Keep only the configured administrator; previous misconfigured admin IDs are revoked.
-        c.execute("DELETE FROM users WHERE role='admin' AND telegram_id<>?",(admin_id,))
-        c.execute("INSERT INTO users(telegram_id,role) VALUES (?,'admin') ON CONFLICT(telegram_id) DO UPDATE SET role='admin'",(admin_id,))
+        placeholders = ','.join('?' for _ in admin_ids)
+        c.execute(f"DELETE FROM users WHERE role='admin' AND telegram_id NOT IN ({placeholders})", admin_ids)
+        for admin_id in admin_ids:
+            c.execute("INSERT INTO users(telegram_id,role) VALUES (?,'admin') ON CONFLICT(telegram_id) DO UPDATE SET role='admin'",(admin_id,))
 
 def role(uid):
     with connect() as c:
