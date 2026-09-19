@@ -12,7 +12,7 @@ services:
         sync: false
       - key: WEBHOOK_SECRET
         generateValue: true
-      - key: ADMIN_TELEGRAM_ID
+      - key: ADMIN_TELEGRAM_IDS
         sync: false
       - key: OPENAI_API_KEY
         sync: false
