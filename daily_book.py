@@ -14,7 +14,7 @@ def amount_text(value, currency):
     grouped = '{:,}'.format(int(whole)).replace(',', ' ')
     return grouped + ('.' + fraction if dot else '') + ' ' + currency
 
-def daily_report(entries, now=None, max_lines=45):
+def daily_report(entries, now=None, max_lines=14):
     now = now or datetime.now(LOCAL_TZ)
     entries = list(entries)
     title = '📒 Кунлик касса дафтари — ' + now.strftime('%d.%m.%Y')
