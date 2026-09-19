@@ -3,7 +3,7 @@ import unittest
 from decimal import Decimal
 from unittest.mock import AsyncMock
 from types import SimpleNamespace
-from groq_extract import extract
+from groq_extract import extract, normalize_voice_text
 
 def fake_client(payload):
     create=AsyncMock(return_value=SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=payload))]))
@@ -22,6 +22,22 @@ class GroqCashTests(unittest.IsolatedAsyncioTestCase):
         op=await extract(client,'Ишчига ойлигидан бир миллион сўм бердим','test-model')
         self.assertEqual(op['amount'],Decimal('1000000'))
         self.assertEqual(op['category'],'salary_advance')
+
+    async def test_voice_spellings_normalized(self):
+        self.assertIn('доллар', normalize_voice_text('кирим 500 долор'))
+        self.assertIn('сўм', normalize_voice_text('чиқим 1200 сом'))
+        self.assertIn('кирим', normalize_voice_text('kirim 500 dollor'))
+
+    async def test_short_spoken_cash_when_model_uncertain(self):
+        client=fake_client('{"error":"unclear"}')
+        op=await extract(client,'кирим 500 долор наманган','test-model')
+        self.assertEqual(op['kind'],'income')
+        self.assertEqual(op['currency'],'USD')
+        self.assertEqual(op['amount'],Decimal('500'))
+
+    async def test_unstated_currency_stays_ambiguous(self):
+        with self.assertRaises(ValueError):
+            await extract(fake_client('{"error":"unclear"}'),'кирим 500','test-model')
 
     async def test_ambiguous_rejected(self):
         with self.assertRaises(ValueError):
