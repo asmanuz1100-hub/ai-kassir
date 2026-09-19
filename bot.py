@@ -178,7 +178,12 @@ async def process(update):
     if not text:
         await send(chat,'Овозли хабар ёки матн юборинг.')
         return
-    op=await interpret(text)
+    try:
+        op=await interpret(text)
+    except ValueError as exc:
+        # Let the cashier correct ASR errors before any financial entry is stored.
+        await send(chat,'🎙 Танилган матн: '+text[:900]+'\n\n⚠️ '+str(exc)[:220]+'\nКирим ёки чиқим, сумма ва валютани аниқ айтиб қайта юборинг. Ҳеч қандай операция сақланмади.')
+        return
     draft_id=db.save_draft(uid,text,op)
     markup={'inline_keyboard':[[{'text':'✅ Тасдиқлаш','callback_data':f'confirm:{draft_id}'},{'text':'❎ Бекор қилиш','callback_data':f'cancel:{draft_id}'}]]}
     await send(chat,f'Эшитилган матн: {text}\n\n{format_op(op)}\n\nТўғри бўлса тасдиқланг.',markup)
