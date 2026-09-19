@@ -32,6 +32,7 @@ ADMIN_IDS=configured_admin_ids()
 AI_KEY=os.getenv('OPENAI_API_KEY','')
 GROQ_KEY=os.getenv('GROQ_API_KEY','')
 client=AsyncOpenAI(api_key=AI_KEY) if AI_KEY else None
+groq_client=AsyncOpenAI(api_key=GROQ_KEY,base_url='https://api.groq.com/openai/v1',timeout=45.0,max_retries=1) if GROQ_KEY else None
 BASE=f'https://api.telegram.org/bot{TOKEN}'
 TEST_MODE=os.getenv('TEST_MODE','0')=='1'
 db=demo_db if TEST_MODE else postgres_db
