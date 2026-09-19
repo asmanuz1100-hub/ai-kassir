@@ -28,6 +28,8 @@ def init(admin_id):
         CREATE TABLE IF NOT EXISTS drafts (id INTEGER PRIMARY KEY AUTOINCREMENT,telegram_id INTEGER NOT NULL,raw_text TEXT,operations TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending', created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS ledger (id INTEGER PRIMARY KEY AUTOINCREMENT,draft_id INTEGER NOT NULL UNIQUE,telegram_id INTEGER NOT NULL,kind TEXT,currency TEXT,category TEXT,amount TEXT,party TEXT,note TEXT,created_at TEXT NOT NULL);
         """)
+        # Keep only the configured administrator; previous misconfigured admin IDs are revoked.
+        c.execute("DELETE FROM users WHERE role='admin' AND telegram_id<>?",(admin_id,))
         c.execute("INSERT INTO users(telegram_id,role) VALUES (?,'admin') ON CONFLICT(telegram_id) DO UPDATE SET role='admin'",(admin_id,))
 
 def role(uid):
