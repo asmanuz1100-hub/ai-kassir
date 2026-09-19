@@ -9,6 +9,9 @@ import demo_db
 from engine import validate_operation, simple_parse, CATEGORIES
 
 logging.basicConfig(level=logging.INFO)
+# Telegram bot credentials must never appear in HTTP request logs.
+logging.getLogger('httpx').setLevel(logging.WARNING)
+logging.getLogger('httpcore').setLevel(logging.WARNING)
 TOKEN=os.getenv('BOT_TOKEN','')
 SECRET=os.getenv('WEBHOOK_SECRET','')
 ADMIN_ID=int(os.getenv('ADMIN_TELEGRAM_ID','0'))
