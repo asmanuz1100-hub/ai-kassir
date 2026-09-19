@@ -81,16 +81,39 @@ async def send(chat_id,text,markup=None):
     await tg('sendMessage',body)
 
 async def transcribe(file_id):
-    if not client: raise ValueError('Овозли хабар учун OPENAI_API_KEY керак.')
+    speech_client = groq_client or client
+    if speech_client is None:
+        raise ValueError('Овоз учун GROQ_API_KEY ни Render Environment га киритинг.')
     info=await tg('getFile',{'file_id':file_id})
     if not info.get('ok'): raise ValueError('Овоз файлини олиб бўлмади.')
     async with httpx.AsyncClient(timeout=60) as h:
         r=await h.get(f"https://api.telegram.org/file/bot{TOKEN}/{info['result']['file_path']}")
         r.raise_for_status()
-        if len(r.content)>15_000_000: raise ValueError('Овоз файли жуда катта.')
-        audio=io.BytesIO(r.content);audio.name='message.ogg'
-    result=await client.audio.transcriptions.create(model=os.getenv('TRANSCRIBE_MODEL','whisper-1'),file=audio,prompt='Ўзбекча ва русча кирим, чиқим, сўм, доллар, маош, Наманган.')
-    return result.text
+        if not r.content or len(r.content)>15_000_000:
+            raise ValueError('Овоз файли бўш ёки жуда катта.')
+        audio=io.BytesIO(r.content)
+        audio.name='telegram_voice.ogg'
+    try:
+        if groq_client:
+            result=await groq_client.audio.transcriptions.create(
+                model=os.getenv('GROQ_TRANSCRIBE_MODEL','whisper-large-v3'),
+                file=audio,
+                response_format='json',
+                prompt='Ўзбекча ва русча касса: сўм, доллар, кирим, чиқим, иш ҳақи, Наманган, Фурқат.'
+            )
+        else:
+            result=await client.audio.transcriptions.create(
+                model=os.getenv('TRANSCRIBE_MODEL','whisper-1'),
+                file=audio,
+                prompt='Ўзбекча ва русча кирим, чиқим, сўм, доллар, маош, Наманган.'
+            )
+    except Exception:
+        logging.warning('Speech recognition failed: verify provider configuration and quota')
+        raise ValueError('Овозни таниб бўлмади. Groq калити ва лимитини текширинг ёки матн ёзинг.')
+    recognized=(result.text or '').strip()
+    if not recognized:
+        raise ValueError('Овоз тушунарсиз. Қайта айтиб кўринг ёки матн ёзинг.')
+    return recognized
 
 async def interpret(text):
     if not client: return simple_parse(text)
