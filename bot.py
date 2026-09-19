@@ -6,7 +6,8 @@ from fastapi import FastAPI, HTTPException, Request
 from openai import AsyncOpenAI
 import db as postgres_db
 import demo_db
-from engine import validate_operation, simple_parse, CATEGORIES
+from engine import validate_operation, simple_parse, CATEGORIES, cash_signals
+from daily_book import daily_report
 from groq_extract import extract as groq_extract
 
 logging.basicConfig(level=logging.INFO)
@@ -130,6 +131,8 @@ def format_op(op):
     sign='🟢 Кирим' if op['kind']=='income' else '🔴 Чиқим'
     return f"{sign}\n{op['amount']} {op['currency']}\nКатегория: {op['category']}\nҲамкор: {op['party'] or '—'}\nИзоҳ: {op['note'] or '—'}"
 
+MENU = {'keyboard': [[{'text':'➕ Кирим'},{'text':'➖ Чиқим'}],[{'text':'📒 Бугунги ҳисобот'}]], 'resize_keyboard':True}
+
 async def process(update):
     msg=update.get('message') or {}
     cb=update.get('callback_query')
@@ -155,16 +158,23 @@ async def process(update):
         return
     text=(msg.get('text') or '').strip()
     if text in ('/start','/help'):
-        await send(chat,'AI Кассир 💰\nОвозли ёки матнли кирим/чиқим юборинг.\n/balance — касса ҳаракати (бошланғич қолдиқсиз)\n/today — кунлик ҳисобот\n/month — ойлик ҳисобот\n/id — Telegram ID\nАдмин: /allow TELEGRAM_ID')
+        await send(chat,'AI Кассир 📒\\nОвозли ёки матнли кирим-чиқим юборинг.\\n➕ Кирим — пул олинди\\n➖ Чиқим — пул берилди\\n📒 Бугунги ҳисобот — кунлик касса дафтари\\n\\nОперация сақланишидан олдин тасдиқлаш керак.\\nАдмин: /allow TELEGRAM_ID',MENU)
         return
-    if text=='/id': await send(chat,f'Telegram ID: {uid}');return
-    if text=='/balance':
-        data=db.balances()
-        await send(chat,'Касса ҳаракати (бошланғич қолдиқ киритилмаган):\n'+('\n'.join(f"{x['currency']}: {x['balance']}" for x in data) or 'Операциялар йўқ.'))
+    if text=='/id':
+        await send(chat,f'Telegram ID: {uid}')
         return
-    if text in ('/today','/month'):
-        rows=db.report('today' if text=='/today' else 'month')
-        await send(chat,'Ҳисобот:\n'+('\n'.join(f"{r['currency']} / {r['kind']} / {r['category']}: {r['total']} ({r['entries']} та)" for r in rows) or 'Операциялар йўқ.'))
+    if text in ('➕ Кирим','➖ Чиқим'):
+        direction='income' if text=='➕ Кирим' else 'expense'
+        db.set_entry_mode(uid,direction)
+        example='Фурқатдан 500 доллар олдим' if direction=='income' else 'Ишчига 1 миллион сўм бердим'
+        await send(chat,f"{text} танланди. Энди битта операцияни овозли ёки матнли юборинг.\\nМасалан: {example}\\nСумма ва валютани аниқ айтинг.")
+        return
+    if text in ('📒 Бугунги ҳисобот','/today'):
+        rows=db.today_entries(None if user_role=='admin' else uid)
+        await send(chat,daily_report(rows),MENU)
+        return
+    if text in ('/month','/balance'):
+        await send(chat,'Ҳозир фақат кунлик кирим-чиқим дафтари ишлайди. 📒 Бугунги ҳисоботни танланг.',MENU)
         return
     if text.startswith('/allow '):
         if user_role!='admin': await send(chat,'Фақат админ учун.');return
@@ -176,15 +186,25 @@ async def process(update):
     if msg.get('voice'):
         text=await transcribe(msg['voice']['file_id'])
     if not text:
-        await send(chat,'Овозли хабар ёки матн юборинг.')
+        await send(chat,'Овозли хабар ёки матн юборинг.',MENU)
         return
+    original_text=text
+    selected=db.get_entry_mode(uid)
     try:
+        if selected:
+            _,spoken_kind=cash_signals(text)
+            if spoken_kind and spoken_kind!=selected:
+                raise ValueError('Танланган кирим/чиқим ва хабарингиз бир-бирига мос эмас. Тўғри тугмани танланг.')
+            if spoken_kind is None:
+                text=('Кирим: ' if selected=='income' else 'Чиқим: ')+text
         op=await interpret(text)
+        if selected and op['kind']!=selected:
+            raise ValueError('AI кирим/чиқимни танланган тугмадан бошқача аниқлади. Операцияни қайта ёзинг.')
     except ValueError as exc:
-        # Let the cashier correct ASR errors before any financial entry is stored.
-        await send(chat,'🎙 Танилган матн: '+text[:900]+'\n\n⚠️ '+str(exc)[:220]+'\nКирим ёки чиқим, сумма ва валютани аниқ айтиб қайта юборинг. Ҳеч қандай операция сақланмади.')
+        await send(chat,'🎙 Танилган матн: '+original_text[:900]+'\\n\\n⚠️ '+str(exc)[:220]+'\\nСумма ва валютани аниқ айтиб қайта юборинг. Ҳеч қандай операция сақланмади.')
         return
-    draft_id=db.save_draft(uid,text,op)
+    draft_id=db.save_draft(uid,original_text,op)
+    if selected: db.clear_entry_mode(uid)
     markup={'inline_keyboard':[[{'text':'✅ Тасдиқлаш','callback_data':f'confirm:{draft_id}'},{'text':'❎ Бекор қилиш','callback_data':f'cancel:{draft_id}'}]]}
     await send(chat,f'Эшитилган матн: {text}\n\n{format_op(op)}\n\nТўғри бўлса тасдиқланг.',markup)
 
