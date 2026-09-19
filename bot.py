@@ -4,7 +4,8 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, HTTPException, Request
 from openai import AsyncOpenAI
-import db
+import db as postgres_db
+import demo_db
 from engine import validate_operation, simple_parse, CATEGORIES
 
 logging.basicConfig(level=logging.INFO)
@@ -14,16 +15,34 @@ ADMIN_ID=int(os.getenv('ADMIN_TELEGRAM_ID','0'))
 AI_KEY=os.getenv('OPENAI_API_KEY','')
 client=AsyncOpenAI(api_key=AI_KEY) if AI_KEY else None
 BASE=f'https://api.telegram.org/bot{TOKEN}'
+TEST_MODE=os.getenv('TEST_MODE','0')=='1'
+db=demo_db if TEST_MODE else postgres_db
 
 @asynccontextmanager
 async def lifespan(app):
-    # The deploy is safe to start before credentials and an independent DB are provisioned.
-    # Until fully configured, the webhook rejects all financial transactions.
-    app.state.ready = bool(TOKEN and SECRET and ADMIN_ID and os.getenv('DATABASE_URL'))
+    # The free disposable test DB is strictly isolated from all other bots.
+    # Production requires a separate durable DATABASE_URL and TEST_MODE=0.
+    app.state.test_mode=TEST_MODE
+    app.state.ready=bool(TOKEN and SECRET and ADMIN_ID and (TEST_MODE or os.getenv('DATABASE_URL')))
     if app.state.ready:
         db.init(ADMIN_ID)
+        base_url=os.getenv('APP_BASE_URL','').rstrip('/')
+        if base_url:
+            try:
+                async with httpx.AsyncClient(timeout=15) as http:
+                    response=await http.post(BASE+'/setWebhook',json={
+                        'url':base_url+'/webhook/'+SECRET,
+                        'allowed_updates':['message','callback_query'],
+                        'drop_pending_updates':False
+                    })
+                    response.raise_for_status()
+                    if not response.json().get('ok'):
+                        logging.error('Telegram webhook registration rejected')
+                    else: logging.info('Telegram webhook registered')
+            except Exception:
+                logging.exception('Unable to register webhook')
     else:
-        logging.warning('AI Kassir awaiting new BOT_TOKEN, WEBHOOK_SECRET, ADMIN_TELEGRAM_ID and independent DATABASE_URL')
+        logging.warning('AI Kassir setup incomplete')
     yield
 
 app=FastAPI(lifespan=lifespan)
@@ -37,6 +56,7 @@ async def tg(method,body):
         return result
 
 async def send(chat_id,text,markup=None):
+    if TEST_MODE: text='🧪 ТЕСТ РЕЖИМИ: ёзувлар вақтинчалик, ҳақиқий касса учун эмас.\n'+text
     body={'chat_id':chat_id,'text':text}
     if markup: body['reply_markup']=markup
     await tg('sendMessage',body)
@@ -119,7 +139,7 @@ async def process(update):
     await send(chat,f'Эшитилган матн: {text}\n\n{format_op(op)}\n\nТўғри бўлса тасдиқланг.',markup)
 
 @app.get('/health')
-async def health(): return {'status':'ok' if app.state.ready else 'setup_required'}
+async def health(): return {'status':'ok' if app.state.ready else 'setup_required','mode':'disposable_test' if TEST_MODE else 'production'}
 
 @app.post('/webhook/{secret}')
 async def webhook(secret:str,request:Request):
@@ -129,16 +149,13 @@ async def webhook(secret:str,request:Request):
     update=await request.json()
     update_id=update.get('update_id')
     if not isinstance(update_id,int): raise HTTPException(400)
-    with db.connect() as con:
-        fresh=con.execute('INSERT INTO processed_updates(update_id) VALUES(%s) ON CONFLICT DO NOTHING RETURNING update_id',(update_id,)).fetchone()
-    if not fresh: return {'ok':True,'duplicate':True}
+    if not db.claim_update(update_id): return {'ok':True,'duplicate':True}
     try: await process(update)
     except (ValueError,PermissionError) as exc:
         m=update.get('message') or update.get('callback_query',{}).get('message',{})
         if m.get('chat',{}).get('id'): await send(m['chat']['id'],f'⚠️ {str(exc)[:300]}\nАниқроқ ёзинг ёки овозни қайта юборинг.')
     except Exception:
         logging.exception('Update failed: %s',update_id)
-        with db.connect() as con:
-            con.execute('DELETE FROM processed_updates WHERE update_id=%s',(update_id,))
+        db.release_update(update_id)
         raise HTTPException(500,'Processing failed; inspect logs')
     return {'ok':True}
