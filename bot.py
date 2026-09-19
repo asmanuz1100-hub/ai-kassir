@@ -158,7 +158,7 @@ async def process(update):
         return
     text=(msg.get('text') or '').strip()
     if text in ('/start','/help'):
-        await send(chat,'AI Кассир 📒\\nОвозли ёки матнли кирим-чиқим юборинг.\\n➕ Кирим — пул олинди\\n➖ Чиқим — пул берилди\\n📒 Бугунги ҳисобот — кунлик касса дафтари\\n\\nОперация сақланишидан олдин тасдиқлаш керак.\\nАдмин: /allow TELEGRAM_ID',MENU)
+        await send(chat,'AI Кассир 📒\nОвозли ёки матнли кирим-чиқим юборинг.\n➕ Кирим — пул олинди\n➖ Чиқим — пул берилди\n📒 Бугунги ҳисобот — кунлик касса дафтари\n\nОперация сақланишидан олдин тасдиқлаш керак.\nАдмин: /allow TELEGRAM_ID',MENU)
         return
     if text=='/id':
         await send(chat,f'Telegram ID: {uid}')
@@ -167,7 +167,7 @@ async def process(update):
         direction='income' if text=='➕ Кирим' else 'expense'
         db.set_entry_mode(uid,direction)
         example='Фурқатдан 500 доллар олдим' if direction=='income' else 'Ишчига 1 миллион сўм бердим'
-        await send(chat,f"{text} танланди. Энди битта операцияни овозли ёки матнли юборинг.\\nМасалан: {example}\\nСумма ва валютани аниқ айтинг.")
+        await send(chat,f"{text} танланди. Энди битта операцияни овозли ёки матнли юборинг.\nМасалан: {example}\nСумма ва валютани аниқ айтинг.")
         return
     if text in ('📒 Бугунги ҳисобот','/today'):
         rows=db.today_entries(None if user_role=='admin' else uid)
@@ -201,7 +201,7 @@ async def process(update):
         if selected and op['kind']!=selected:
             raise ValueError('AI кирим/чиқимни танланган тугмадан бошқача аниқлади. Операцияни қайта ёзинг.')
     except ValueError as exc:
-        await send(chat,'🎙 Танилган матн: '+original_text[:900]+'\\n\\n⚠️ '+str(exc)[:220]+'\\nСумма ва валютани аниқ айтиб қайта юборинг. Ҳеч қандай операция сақланмади.')
+        await send(chat,'🎙 Танилган матн: '+original_text[:900]+'\n\n⚠️ '+str(exc)[:220]+'\nСумма ва валютани аниқ айтиб қайта юборинг. Ҳеч қандай операция сақланмади.')
         return
     draft_id=db.save_draft(uid,original_text,op)
     if selected: db.clear_entry_mode(uid)
