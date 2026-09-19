@@ -7,6 +7,7 @@ from openai import AsyncOpenAI
 import db as postgres_db
 import demo_db
 from engine import validate_operation, simple_parse, CATEGORIES
+from groq_extract import extract as groq_extract
 
 logging.basicConfig(level=logging.INFO)
 # Telegram bot credentials must never appear in HTTP request logs.
@@ -116,6 +117,8 @@ async def transcribe(file_id):
     return recognized
 
 async def interpret(text):
+    if groq_client:
+        return await groq_extract(groq_client,text,os.getenv('GROQ_TEXT_MODEL','llama-3.3-70b-versatile'))
     if not client: return simple_parse(text)
     schema={'type':'object','properties':{'kind':{'type':'string','enum':['income','expense']},'currency':{'type':'string','enum':['USD','UZS']},'category':{'type':'string','enum':sorted(CATEGORIES)},'amount':{'type':'string'},'party':{'type':'string'},'note':{'type':'string'}},'required':['kind','currency','category','amount','party','note'],'additionalProperties':False}
     response=await client.chat.completions.create(model=os.getenv('AI_MODEL','gpt-4o-mini'),messages=[{'role':'system','content':'Extract exactly ONE actual cash transaction from Uzbek/Russian. Never infer a missing amount or currency. If there are multiple transactions or unclear details, refuse. Numeric amount should be decimal digits in smallest currency unit (million=1000000, thousand=1000); no separators. Expense and income are from the cashier cashbox perspective. A debt repayment is income/debt_repayment; wage advance is expense/salary_advance. Never mark a bank-to-bank noncash transfer as cash.'},{'role':'user','content':text}],response_format={'type':'json_schema','json_schema':{'name':'cash_operation','strict':True,'schema':schema}})
