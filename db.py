@@ -13,15 +13,21 @@ def connect():
         con.commit()
     finally: con.close()
 
-def init(admin_id):
+def init(admin_ids):
+    admin_ids = tuple(dict.fromkeys(int(i) for i in admin_ids))
+    if not admin_ids or any(i <= 0 for i in admin_ids):
+        raise ValueError('At least one valid admin ID is required')
     with connect() as con:
         con.executescript("""
         CREATE TABLE IF NOT EXISTS users(telegram_id INTEGER PRIMARY KEY,role TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS processed_updates(update_id INTEGER PRIMARY KEY,created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         CREATE TABLE IF NOT EXISTS drafts(id INTEGER PRIMARY KEY AUTOINCREMENT,telegram_id INTEGER NOT NULL,raw_text TEXT NOT NULL,operations TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'pending',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
-        CREATE TABLE IF NOT EXISTS ledger(id INTEGER PRIMARY KEY AUTOINCREMENT,draft_id INTEGER UNIQUE,telegram_id INTEGER NOT NULL,kind TEXT NOT NULL,currency TEXT NOT NULL,category TEXT NOT NULL,amount TEXT NOT NULL,party TEXT DEFAULT '',note TEXT DEFAULT '',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+        CREATE TABLE IF NOT EXISTS ledger(id INTEGER PRIMARY KEY AUTOINCREMENT,draft_id INTEGER UNIQUE,telegram_id INTEGER NOT NULL,kind TEXT NOT NULL,currency TEXT NOT NULL,category TEXT NOT NULL,amount TEXT NOT NULL,party TEXT DEFAULT '',note TEXT NOT NULL DEFAULT '',created_at TEXT DEFAULT CURRENT_TIMESTAMP);
         """)
-        con.execute("INSERT OR REPLACE INTO users(telegram_id,role) VALUES(?,'admin')",(admin_id,))
+        placeholders = ','.join('?' for _ in admin_ids)
+        con.execute(f"DELETE FROM users WHERE role='admin' AND telegram_id NOT IN ({placeholders})", admin_ids)
+        for admin_id in admin_ids:
+            con.execute("INSERT INTO users(telegram_id,role) VALUES (?,'admin') ON CONFLICT(telegram_id) DO UPDATE SET role='admin'",(admin_id,))
 
 def role(uid):
     with connect() as con:
