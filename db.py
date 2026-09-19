@@ -62,3 +62,11 @@ def report(period='today'):
     where="created_at >= (now() AT TIME ZONE 'Asia/Tashkent')::date AT TIME ZONE 'Asia/Tashkent'" if period=='today' else "created_at >= date_trunc('month',now() AT TIME ZONE 'Asia/Tashkent') AT TIME ZONE 'Asia/Tashkent'"
     with connect() as con:
         return con.execute(f'SELECT currency,kind,category,COUNT(*) AS entries,SUM(amount) AS total FROM ledger WHERE {where} GROUP BY currency,kind,category ORDER BY currency,kind,category').fetchall()
+
+def claim_update(update_id):
+    with connect() as con:
+        return bool(con.execute('INSERT INTO processed_updates(update_id) VALUES(%s) ON CONFLICT DO NOTHING RETURNING update_id',(update_id,)).fetchone())
+
+def release_update(update_id):
+    with connect() as con:
+        con.execute('DELETE FROM processed_updates WHERE update_id=%s',(update_id,))
