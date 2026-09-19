@@ -30,6 +30,7 @@ def configured_admin_ids():
 
 ADMIN_IDS=configured_admin_ids()
 AI_KEY=os.getenv('OPENAI_API_KEY','')
+GROQ_KEY=os.getenv('GROQ_API_KEY','')
 client=AsyncOpenAI(api_key=AI_KEY) if AI_KEY else None
 BASE=f'https://api.telegram.org/bot{TOKEN}'
 TEST_MODE=os.getenv('TEST_MODE','0')=='1'
