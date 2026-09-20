@@ -54,7 +54,7 @@ async def transcribe(file: UploadFile = File(...), authorization: str = Header(d
         # Telegram OGG/Opus is decoded to 16 kHz mono; do not run shell commands.
         converted = subprocess.run(
             ["ffmpeg", "-nostdin", "-v", "error", "-i", "pipe:0",
-             "-ar", "16000", "-ac", "1", "-f", "wav", "pipe:1"],
+             "-t", "31", "-ar", "16000", "-ac", "1", "-f", "wav", "pipe:1"],
             input=audio, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             timeout=25, check=True,
         ).stdout
