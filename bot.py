@@ -9,6 +9,7 @@ import demo_db
 from engine import validate_operation, simple_parse, CATEGORIES, cash_signals
 from daily_book import daily_report
 from groq_extract import extract as groq_extract
+from rubai_client import rubai_ready, rubai_transcribe
 
 logging.basicConfig(level=logging.INFO)
 # Telegram bot credentials must never appear in HTTP request logs.
@@ -84,8 +85,8 @@ async def send(chat_id,text,markup=None):
 
 async def transcribe(file_id):
     speech_client = groq_client or client
-    if speech_client is None:
-        raise ValueError('Овоз учун GROQ_API_KEY ни Render Environment га киритинг.')
+    if not rubai_ready() and speech_client is None:
+        raise ValueError('Овоз учун Groq ёки алоҳида RubaiSTT серверини созланг.')
     info=await tg('getFile',{'file_id':file_id})
     if not info.get('ok'): raise ValueError('Овоз файлини олиб бўлмади.')
     async with httpx.AsyncClient(timeout=60) as h:
@@ -95,6 +96,9 @@ async def transcribe(file_id):
             raise ValueError('Овоз файли бўш ёки жуда катта.')
         audio=io.BytesIO(r.content)
         audio.name='telegram_voice.ogg'
+    if rubai_ready():
+        # Remote model is opt-in: do not send cash audio to a public demo.
+        return await rubai_transcribe(r.content, 'telegram_voice.ogg')
     try:
         if groq_client:
             result=await groq_client.audio.transcriptions.create(
