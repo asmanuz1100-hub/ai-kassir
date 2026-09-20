@@ -1,3 +1,9 @@
+## Телефондан бепул интерактив синов (ботга уланмаган)
+
+[RubaiSTT v2 Colab тест ноутбуги](https://colab.research.google.com/github/asmanuz1100-hub/ai-kassir/blob/main/rubai_service/rubai_phone_test.ipynb) — Android браузеридан очинг, Google аккаунтга киринг, `Runtime → Run all` ни танланг. GPU берилса T4 танлашингиз мумкин. Кейин **махфий бўлмаган синов** Telegram аудиосини юклаб, модел таниб олган матнни кўрасиз.
+
+Google Colab бепул ҳисоблаш ресурслари чекланган ва кафолатланмайди. Бу ноутбук *интерактив тест учун*, доимий webhook/API хостинги учун эмас; у bot'нинг `RUBAI_ASR_URL` ва `RUBAI_ASR_TOKEN` созламаларини тўлдирмайди. Colab'да ташқи туннел ёки web service'ни ишга туширманг. Бепул телефон-режимда Rubai'ни Telegram'га 24/7 улаш ҳозирча амалга оширилмаган.
+
 # RubaiSTT v2 Medium — private Uzbek ASR service
 
 Model: https://huggingface.co/islomov/rubaistt_v2_medium (Apache-2.0).
